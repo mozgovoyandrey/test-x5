@@ -1,0 +1,311 @@
+<?php
+
+
+$params = $_GET['blocks'] ?? '10:10:20:1:one,40:20:15:2:two,10:20:30:2:three';
+
+$blocks = array_map(function ($block) {
+    $sizes = explode(':', $block);
+    return new Block($sizes[0], $sizes[1], $sizes[2], $sizes[3], $sizes[4] ?? null);
+}, explode(',', $params));
+
+echo '<pre>';
+
+
+$layer = new Layer(100, 100);
+$layer->printMap();
+$docker = new Docker($blocks, new SizeManager());
+
+$docker->run();
+//var_dump($blocks);
+
+
+
+
+class Block
+{
+    public $x;
+    public $y;
+    public $z;
+
+    public $count;
+    public $type;
+
+    public function __construct($x, $y, $z, $count = 1, $type = null)
+    {
+        if (empty($type)) {
+            $type = md5($x . $y . $z . time() . rand(0, 100));
+        }
+
+        $this->x = $x;
+        $this->y = $y;
+        $this->z = $z;
+
+        $this->count = $count;
+        $this->type = $type;
+    }
+}
+
+class Container
+{
+    const DEFAULT_LENGTH = 120;
+    const DEFAULT_WIDTH = 80;
+    const DEFAULT_HEIGHT = 100;
+
+    public $length;
+    public $width;
+    public $height;
+
+    public function __construct($length = self::DEFAULT_LENGTH, $width = self::DEFAULT_WIDTH, $height = self::DEFAULT_HEIGHT)
+    {
+        $this->length = $length;
+        $this->width = $width;
+        $this->height = $height;
+    }
+}
+
+//class Map {
+//    public $map = [];
+//
+//    public $layers = [];
+//
+//
+//
+//
+//    public function __construct()
+//    {
+//    }
+//}
+
+/**
+ * Слой для укладки товара (уникальный горизонтальный разрез
+ * Class Layer
+ */
+class Layer {
+    const SIZE_BLOCK = 5;
+    /** @var int Высота карты */
+    private $length = 0;
+
+    /** @var int Ширина карты */
+    private $width = 0;
+    private $height = 0;
+
+    /** @var array бинарное представление карты */
+    private $map = [];
+
+    public function __construct($length, $width, $height = 0, $lockedPlaces = [])
+    {
+        $this->length = $length;
+        $this->width = $width;
+        $this->height = $height;
+
+        $this->map = array_fill(0, $height, array_fill(0, $width, 0));
+    }
+
+    public function getEmptyPlaces(){
+
+    }
+
+    public function printMap(){
+
+        echo '<style>
+            .map {
+                width: ' . $this->length * self::SIZE_BLOCK . 'px;
+                height: ' . $this->width * self::SIZE_BLOCK . 'px;
+                border: 1px solid gray;
+            }
+            
+            .cell {
+                width: 5px;
+                height: 5px;
+                display: inline-flex;
+            }
+            
+            .cell:nth-child(odd) {
+                /* background-color: green; */
+            }
+            
+            .cell.empty:hover {
+                background-color: #ffd60d;
+            }
+            
+            .cell.empty:active {
+                background-color: green;
+            }
+            .cell.inroute {
+                background-color: green;
+            }
+            .cell.noempty {
+                background-color: #000000;
+            }
+        </style>';
+
+
+        $map = $this->map;
+
+        echo '<div class="map">';
+        foreach ($map as $x => $row) {
+            foreach ($row as $y => $cell) {
+                echo '<div class="cell '. ($cell ? 'noempty' : 'empty') .'" id="cell_'.$x.'_'.$y.'" title="'.$x.'_'.$y.'" onClick="clickToCell('.$x.','.$y.')"></div>';
+            }
+            echo PHP_EOL;
+        }
+        echo '</div>';
+    }
+}
+
+class Docker
+{
+    private $blocks = [];
+    private $sizeManager = [];
+
+    /**
+     * Docker constructor.
+     * @param Block[] $blocks
+     */
+    public function __construct(array $blocks, SizeManager $sizeManager)
+    {
+        foreach ($blocks as $block) {
+            $this->blocks[$block->type] = $block;
+
+            $sizeManager->addSizes($block);
+        }
+
+        $this->sizeManager = $sizeManager;
+    }
+
+    
+    public function run() {
+        $sizeLine1 = $this->sizeManager->getSizeLine();
+        foreach ($sizeLine1 as $size1) {
+            $sizeLine2 = $this->sizeManager->getSizeLine($size1);
+            foreach ($sizeLine2 as $size2) {
+                
+            }
+        }
+    }
+    
+    private function getMax(){
+
+    }
+}
+
+class SizeManager {
+    private $sizes = [];
+
+    public function sortSizes(){
+        krsort($this->sizes);
+        foreach ($this->sizes as &$sizeLevel2) {
+            krsort($sizeLevel2);
+            foreach ($sizeLevel2 as &$sizeLevel3) {
+                krsort($sizeLevel3);
+            }
+        }
+    }
+
+    public function addSizes(Block $block)
+    {
+        $this->sizes[$block->x][$block->y][$block->z][$block->type] = $block;
+        $this->sizes[$block->x][$block->z][$block->y][$block->type] = $block;
+        $this->sizes[$block->y][$block->x][$block->z][$block->type] = $block;
+        $this->sizes[$block->y][$block->z][$block->x][$block->type] = $block;
+        $this->sizes[$block->z][$block->x][$block->y][$block->type] = $block;
+        $this->sizes[$block->z][$block->y][$block->x][$block->type] = $block;
+
+        $this->sortSizes();
+    }
+
+    public function delSizes(Block $block)
+    {
+        $block->count--;
+        if ($block->count == 0) {
+            if (isset($this->sizes[$block->x][$block->y][$block->z][$block->type])) {
+                unset($this->sizes[$block->x][$block->y][$block->z][$block->type]);
+            }
+            if (isset($this->sizes[$block->x][$block->y][$block->z]) && count($this->sizes[$block->x][$block->y][$block->z]) == 0) {
+                unset($this->sizes[$block->x][$block->y][$block->z]);
+            }
+            if (isset($this->sizes[$block->x][$block->y]) && count($this->sizes[$block->x][$block->y]) == 0) {
+                unset($this->sizes[$block->x][$block->y]);
+            }
+
+            if (isset($this->sizes[$block->x][$block->z][$block->y][$block->type])) {
+                unset($this->sizes[$block->x][$block->z][$block->y][$block->type]);
+            }
+            if (isset($this->sizes[$block->x][$block->z][$block->y]) && count($this->sizes[$block->x][$block->z][$block->y]) == 0) {
+                unset($this->sizes[$block->x][$block->z][$block->y]);
+            }
+            if (isset($this->sizes[$block->x][$block->z]) && count($this->sizes[$block->x][$block->z]) == 0) {
+                unset($this->sizes[$block->x][$block->z]);
+            }
+
+            if (isset($this->sizes[$block->x]) && count($this->sizes[$block->x]) == 0) {
+                unset($this->sizes[$block->x]);
+            }
+
+
+
+            if (isset($this->sizes[$block->y][$block->x][$block->z][$block->type])) {
+                unset($this->sizes[$block->y][$block->x][$block->z][$block->type]);
+            }
+            if (isset($this->sizes[$block->y][$block->x][$block->z]) && count($this->sizes[$block->y][$block->x][$block->z]) == 0) {
+                unset($this->sizes[$block->y][$block->x][$block->z]);
+            }
+            if (isset($this->sizes[$block->y][$block->x]) && count($this->sizes[$block->y][$block->x]) == 0) {
+                unset($this->sizes[$block->y][$block->x]);
+            }
+
+
+            if (isset($this->sizes[$block->y][$block->z][$block->x][$block->type])) {
+                unset($this->sizes[$block->y][$block->z][$block->x][$block->type]);
+            }
+            if (isset($this->sizes[$block->y][$block->z][$block->x]) && count($this->sizes[$block->y][$block->z][$block->x]) == 0) {
+                unset($this->sizes[$block->y][$block->z][$block->x]);
+            }
+            if (isset($this->sizes[$block->y][$block->z]) && count($this->sizes[$block->y][$block->z]) == 0) {
+                unset($this->sizes[$block->y][$block->z]);
+            }
+
+            if (isset($this->sizes[$block->y]) && count($this->sizes[$block->y]) == 0) {
+                unset($this->sizes[$block->y]);
+            }
+
+
+
+            if (isset($this->sizes[$block->z][$block->x][$block->y][$block->type])) {
+                unset($this->sizes[$block->z][$block->x][$block->y][$block->type]);
+            }
+            if (isset($this->sizes[$block->z][$block->x][$block->y]) && count($this->sizes[$block->z][$block->x][$block->y]) == 0) {
+                unset($this->sizes[$block->z][$block->x][$block->y]);
+            }
+            if (isset($this->sizes[$block->z][$block->x]) && count($this->sizes[$block->z][$block->x]) == 0) {
+                unset($this->sizes[$block->z][$block->x]);
+            }
+            if (isset($this->sizes[$block->z][$block->y][$block->x])) {
+                unset($this->sizes[$block->z][$block->y][$block->x][$block->type]);
+            }
+            if (isset($this->sizes[$block->z][$block->y][$block->x]) && count($this->sizes[$block->z][$block->y][$block->x]) == 0) {
+                unset($this->sizes[$block->z][$block->y][$block->x]);
+            }
+            if (isset($this->sizes[$block->z][$block->y]) && count($this->sizes[$block->z][$block->y]) == 0) {
+                unset($this->sizes[$block->z][$block->y]);
+            }
+
+            if (isset($this->sizes[$block->z]) && count($this->sizes[$block->z]) == 0) {
+                unset($this->sizes[$block->z]);
+            }
+        }
+    }
+    
+    public function getSizeLine($x = null, $y = null) {
+        if (!empty($x) && !empty($y)) {
+            $sizes = isset($this->sizes[$x][$y]) ? array_keys($this->sizes[$x][$y]) : [];
+        } elseif (!empty($x)) {
+            $sizes = isset($this->sizes[$x]) ? array_keys($this->sizes[$x]) : [];
+        } else {
+            $sizes = isset($this->sizes) ? array_keys($this->sizes) : [];
+        }
+        
+        //rsort($sizes);
+        return $sizes;
+    }
+}
